@@ -2,7 +2,7 @@
                      
 check_xsievents is a Nagios Plugin-style perl script that checks the time it takes to establish a XSI Events channel, subscribe for "Basic Call" events and then wait until the first SubscriptionEvent is received on the event channel.
 
-Status + response time is reported in Nagios Plugin-style and have been tested with LibreNMS to generate generate graphs over varion in response time.
+Status + response time is reported in Nagios Plugin-style and have been tested with LibreNMS to generate generate graphs over variation in response time.
 
 If you are a BroadWorks based operator with customers that rely on client apps using XSI (such as my Call Control for BroadWorks iOS+Android apps), you should ensure that average response time reported with this plugin is less 500mS. 
 
