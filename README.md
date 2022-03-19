@@ -1,16 +1,25 @@
 # check_xsievents
                      
-check_xsievents is a Nagios Plugin-style perl script that checks the time it takes to establish a XSI Events channel, subscribe for "Basic Call" events and then wait until the first SubscriptionEvent is received on the event channel.
+check_xsievents is a Nagios Plugin-style perl script that checks the time it takes to establish a XSI Events channel, subscribe 
+for "Basic Call" events and then wait until the first SubscriptionEvent is received on the event channel.
 
 Status + response time is reported in Nagios Plugin-style and have been tested with LibreNMS to generate generate graphs over variation in response time.
 
-If you are a BroadWorks based operator with customers that rely on client apps using XSI (such as my Call Control for BroadWorks iOS+Android apps), you should ensure that average response time reported with this plugin is less 500mS. 
+If you are a BroadWorks based operator with customers that rely on client apps using XSI (such as my Call Control for BroadWorks iOS+Android apps), you 
+should ensure that average response time reported with this plugin is less 500mS. 
 
 Usage is
 ```
-./check_xsievents -u username -p password -H hostname [-X xsievent_prefix] [-v] [-c crtitical_timeout] [-w warning_timeout]
+./check_xsievents -u username -p password -H hostname 
+
 ```
-Default xsievent_prefix is "com.broadsoft.xsi-events", warning timeout 2s and critical timeout is 10s.
+with optional parameters
+```
+-X xsievent_prefix    Default xsievent_prefix is "com.broadsoft.xsi-events"
+-v                    Verbose - prints send and received data.
+-c crtitical_timeout  Seconds to wait before returning Nagios_CRITICAL - default is 30s
+-w warning_timeout    Seconds to wait before returning Nagios_WARNING - default is 2s
+```
 
 Example:
 ```
