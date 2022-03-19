@@ -87,11 +87,11 @@ $socket->sockopt(SO_RCVTIMEO, pack("qq", $critical_timeout, 0));
 while (my $line = <$socket>) {
 
     print timestamp()."rx: $line" if $verbose;
-    if ($line =~ /HTTP.*(\d\d\d).(.*)/) {
+    if ($line =~ /HTTP.*(\d\d\d).(.*)$/) {
 	    #HTTP/1.1 401 Unauthorized
 	    #HTTP/1.1 200 OK
     	my $code = $1;
-    	my $status = $2;
+    	my $status = trim($2);
     	if ($code ne '200') {
 			$nagios_exit_message = sprintf("XSIEvents failed with error: $code $status after %f seconds", time() - $begin_time);
 			$nagios_exit_code = Nagios_Critical;
