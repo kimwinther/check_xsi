@@ -87,12 +87,18 @@ $socket->sockopt(SO_RCVTIMEO, pack("qq", $critical_timeout, 0));
 while (my $line = <$socket>) {
 
     print timestamp()."rx: $line" if $verbose;
-    #401 Unauthorized
-    if ($line =~ /401 Unauthorized.*/) {		
-		$nagios_exit_message = sprintf("XSIEvent subscription failed with error: 401 Unauthorized after %f seconds", time() - $begin_time);
-		$nagios_exit_code = Nagios_Critical;
-		last
-	}
+    if ($line =~ /HTTP.*(\d\d\d).(.*)/) {
+	    #HTTP/1.1 401 Unauthorized
+	    #HTTP/1.1 200 OK
+    	my $code = $1;
+    	my $status = $2;
+    	if ($code ne '200') {
+			$nagios_exit_message = sprintf("XSIEvents failed with error: $code $status after %f seconds", time() - $begin_time);
+			$nagios_exit_code = Nagios_Critical;
+    	}
+    	print ("$code $status\n") if $verbose;
+    }
+
     if ($line =~ /<Channel([\s\S]*?)<\/Channel>.?/) {
 	
 		if ($1 =~ /<channelId>([\s\S]*?)<\/channelId>.*/) {
@@ -101,7 +107,7 @@ while (my $line = <$socket>) {
 	}
 	if ($line =~ /<summaryEnglish>([\s\S]*?)<\/summaryEnglish>.*/) {
 		my $summaryEnglish = $1;
-		$nagios_exit_message = sprintf("XSIEvent subscription failed with error: %s after %f seconds", $summaryEnglish, time() - $begin_time);
+		$nagios_exit_message = sprintf("XSIEvents failed with error: %s after %f seconds", $summaryEnglish, time() - $begin_time);
 		$nagios_exit_code = Nagios_Critical;
 		last
 	}
