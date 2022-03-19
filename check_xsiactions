@@ -1,4 +1,6 @@
 #!/usr/bin/perl
+# check_xsiactions
+# (c) 2022 Kim Winther (kim@winther.dk)
 use strict;
 use IO::Socket;
 use IO::Socket::SSL;
@@ -21,9 +23,9 @@ GetOptions(
 	'u|username=s' => \$username,
 	'p|passwd=s' => \$password,
 	'H|hostname=s' => \$host
-) or die "Usage: $0 --username user --passwd password -H hostname\n";
+) or die "Usage: $0 -u user -p password -H hostname [-X xsiactions_prefix] [-v]\n";
 if (!$username || !$password || !$host) {
-	die "Usage: $0 --username user --passwd password -H hostname\n";
+	die "Usage: $0 -u user -p password -H hostname [-X xsiactions_prefix] [-v]\n";
 }
 
 
