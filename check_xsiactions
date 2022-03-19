@@ -1,0 +1,110 @@
+#!/usr/bin/perl
+use strict;
+use IO::Socket;
+use IO::Socket::SSL;
+use MIME::Base64;
+use REST::Client;
+use Time::HiRes qw( time );
+use Getopt::Long qw(GetOptions);
+ 
+my $host;
+my $port = 443;
+my $username; 
+my $password; 
+my $warning_timeout = 2;
+my $critical_timeout = 10;
+my $verbose = 0;
+my $xsiactions_prefix = "com.broadsoft.xsi-actions";
+GetOptions(
+	'v|verbose' => \$verbose,
+	'X|prefix=s' => \$xsiactions_prefix,
+	'u|username=s' => \$username,
+	'p|passwd=s' => \$password,
+	'H|hostname=s' => \$host
+) or die "Usage: $0 --username user --passwd password -H hostname\n";
+if (!$username || !$password || !$host) {
+	die "Usage: $0 --username user --passwd password -H hostname\n";
+}
+
+
+
+my $appname = "XSIActions";
+my $applicationId = 'KIWI-$appname responsetime checker 1.0';
+my $begin_time = time();
+
+use constant Nagios_OK => 0;
+use constant Nagios_Warning	=> 1;
+use constant Nagios_Critical => 2;
+use constant Nagios_Unknown	=> 3;
+
+
+my $nagios_exit_code = Nagios_Unknown;
+my $nagios_exit_message = "$appname status is unknown";
+
+
+my $authorization = 'Basic ' . encode_base64($username . ':' . $password);
+open STDERR, '>/dev/null'; 
+	my $client = REST::Client->new();
+	$client->addHeader('Content-Type', 'application/xml');
+	$client->addHeader('charset', 'UTF-8');
+	$client->addHeader('Accept', 'application/xml');
+	$client->addHeader('Authorization', $authorization);
+	$client->addHeader('User-Agent', $applicationId);
+	$client->setTimeout($critical_timeout);
+
+	my $url="https://$host:$port/$xsiactions_prefix/v2.0/user/".$username."/services"; 
+
+	print "GET($url)\n" if $verbose;
+	$client->GET($url);
+	
+	my $response = $client->responseContent();
+	
+	print "rx($url): $response \n" if $verbose;
+
+	my ($error) =  ($response =~ /(Can't connect to .*\))/);
+	
+if ($error) {
+	
+	$nagios_exit_message = sprintf("$appname, $error");
+	$nagios_exit_code = Nagios_Critical;
+	
+} else {
+	my ($summaryEnglish) = ($response =~ /<summaryEnglish>([\s\S]*?)<\/summaryEnglish>.*/);
+	if ($summaryEnglish ne "" || $client->responseCode() ne '200') {
+		if ($summaryEnglish eq "") {
+			$summaryEnglish = "HTTP Status ".$client->responseCode();
+		}
+		$nagios_exit_message = sprintf("$appname, get services failed with XSI error: \"%s\" after %f seconds", $summaryEnglish, time() - $begin_time);
+		$nagios_exit_code = Nagios_Critical;
+	} else {
+		if (time() - $begin_time < $warning_timeout) {
+			$nagios_exit_message = sprintf("$appname OK - %f seconds response time", time() - $begin_time);
+			$nagios_exit_code = Nagios_OK;
+		} else {
+			$nagios_exit_message = sprintf("$appname Warning - %f seconds response time", time() - $begin_time);
+			$nagios_exit_code = Nagios_Warning;
+		}
+	}
+}
+
+if (time() - $begin_time > $critical_timeout) {
+	$nagios_exit_code = Nagios_Critical;
+	$nagios_exit_message = sprintf("$appname timeout (%f seconds)", time() - $begin_time);
+}
+
+nagios_exit();
+
+sub nagios_exit {
+	if ($nagios_exit_code==Nagios_OK || $nagios_exit_code==Nagios_Warning) {
+		# only report time if ok or warning
+		# message|label=value[UOM];[warn];[crit];[min];[max]
+		my $elapsed = time() - $begin_time;	
+		printf("%s|time=%fs;%f;%f;0.0;31.0", $nagios_exit_message, $elapsed, $warning_timeout, $critical_timeout);
+	} else {
+		printf($nagios_exit_message);
+	}
+	
+	print("\n") if $verbose;
+	exit $nagios_exit_code;
+
+}
