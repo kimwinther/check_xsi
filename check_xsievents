@@ -1,0 +1,212 @@
+#!/usr/bin/perl
+# check_xsievents
+# (c) 2022 Kim Winther (kim@winther.dk)
+
+
+use strict;
+use IO::Socket;
+use IO::Socket::SSL;
+use MIME::Base64;
+use REST::Client;
+use Time::HiRes qw( time );
+use DateTime;
+use Getopt::Long qw(GetOptions);
+ 
+my $host;
+my $port = 443;
+my $username; 
+my $password; 
+my $warning_timeout = 2;
+my $critical_timeout = 30;
+my $verbose = 0;
+my $version = 3;
+my $xsievents_prefix = "com.broadsoft.xsi-events";
+GetOptions(
+	'v|verbose' => \$verbose,
+	'u|username=s' => \$username,
+	'p|passwd=s' => \$password,
+	'H|hostname=s' => \$host,
+	'X|prefix=s' => \$xsievents_prefix,
+	'w|warning=i' => \$warning_timeout,
+	'c|critical=i' => \$critical_timeout
+) or die "Usage: $0 -u username -p password -H hostname [-X xsievent_prefix] [-v] [-c crtitical_timeout] [-w warning_timeout]\n";
+if (!$username || !$password || !$host) {
+	die "Usage: $0 -u username -p password -H hostname\n";
+}
+
+
+my $applicationId = 'KIWI-XSIEvents responsetime checker 1.0.'.$version;
+my $begin_time = time();
+
+use constant Nagios_OK => 0;
+use constant Nagios_Warning	=> 1;
+use constant Nagios_Critical => 2;
+use constant Nagios_Unknown	=> 3;
+
+
+my $nagios_exit_code = Nagios_Unknown;
+my $nagios_exit_message = "XSIEvents status is unknown";
+
+my $channelSetId = 'KIWI-';
+$channelSetId .= sprintf("%02X", rand 16) for 1..16;
+
+my $subscriptionId;
+my $cookie;
+
+my $authorization = 'Basic ' . encode_base64($username . ':' . $password, "");
+
+#getServices();
+
+my $channel_request = '<?xml version="1.0" encoding="UTF-8"?><Channel xmlns="http://schema.broadsoft.com/xsi"><channelSetId>'.$channelSetId.'</channelSetId><priority>1</priority><weight>50</weight><expires>3600</expires></Channel>';
+
+my $hello_message = "POST /com.broadsoft.async/$xsievents_prefix/v2.0/channel HTTP/1.1\r\nHost: $host\r\nConnection: keep-alive\r\nContent-Length: ".length($channel_request)."\r\n";
+if ($cookie) {
+	$hello_message .= "Cookie: $cookie\r\n";
+}
+$hello_message .= "Authorization: $authorization \r\n\r\n".$channel_request;
+
+#$hello_message = "POST /com.broadsoft.async/com.broadsoft.xsi-events/v2.0/channel HTTP/1.1\r\nHost: ".$host."\r\nConnection: keep-alive\r\nContent-Length: ".length($channel_request)."\r\nAuthorization: ".$authorization." \r\n\r\n".$channel_request;
+
+print(timestamp()."Connecting to $host:$port\n") if $verbose;
+#my $socket = new IO::Socket::INET ( PeerAddr  => $host, PeerPort  =>  $port, Proto => 'tcp',Timeout => 2) ;
+my $socket = IO::Socket::SSL->new(PeerAddr  => $host, PeerPort  =>  $port, Timeout => $critical_timeout);
+my $sockstat=$!;
+
+if (!$socket || $sockstat =~ /Connection|Operation|Invalid/) {
+	$nagios_exit_message = "XSIEvents - socket error - $sockstat ($host:$port)";
+	$nagios_exit_code = Nagios_Critical;
+	nagios_exit();
+} 
+                        
+print(timestamp()."Connecteded to $host:$port, saying hello with:\n$hello_message\n") if $verbose;
+#$socket->send($hello_message);
+print $socket $hello_message;
+$socket->autoflush;
+$socket->sockopt(SO_RCVTIMEO, pack("qq", $critical_timeout, 0));
+
+while (my $line = <$socket>) {
+
+    print timestamp()."rx: $line" if $verbose;
+    #401 Unauthorized
+    if ($line =~ /401 Unauthorized.*/) {		
+		$nagios_exit_message = sprintf("XSIEvent subscription failed with error: 401 Unauthorized after %f seconds", time() - $begin_time);
+		$nagios_exit_code = Nagios_Critical;
+		last
+	}
+    if ($line =~ /<Channel([\s\S]*?)<\/Channel>.?/) {
+	
+		if ($1 =~ /<channelId>([\s\S]*?)<\/channelId>.*/) {
+			subscribe();
+		}
+	}
+	if ($line =~ /<summaryEnglish>([\s\S]*?)<\/summaryEnglish>.*/) {
+		my $summaryEnglish = $1;
+		$nagios_exit_message = sprintf("XSIEvent subscription failed with error: %s after %f seconds", $summaryEnglish, time() - $begin_time);
+		$nagios_exit_code = Nagios_Critical;
+		last
+	}
+	if ($line =~ /<xsi:Event([\s\S]*?)<\/xsi:Event>.?/) {
+
+		if ($1 =~ /xsi1:type=\"xsi:([\s\S]*?)\".?/) {
+			my $eventType = $1;
+			if ($eventType eq "SubscriptionEvent" && $line =~ /<xsi:sequenceNumber>1<\/xsi:sequenceNumber>.?/) {
+
+				$nagios_exit_message = sprintf("XSIEvents OK - %f seconds response time", time() - $begin_time);
+				if (time() - $begin_time > $warning_timeout) {
+					$nagios_exit_code = Nagios_Warning;
+				} else {
+					$nagios_exit_code = Nagios_OK;
+				}
+				
+				
+				last;
+			} 
+			if ($eventType eq "ChannelTerminatedEvent" && $line =~ /<xsi:reason>([\s\S]*?)<\/xsi:reason>.?/) {
+				my $reason = $1;
+				print(timestamp()."\n Event: $eventType , reason: $reason\n") if $verbose;
+				$nagios_exit_message = sprintf("XSIEvents, channel terminated by server (reason: %s) after %f seconds", $reason, time() - $begin_time);
+				$nagios_exit_code = Nagios_Critical;
+				last;
+			} else {
+				print("\n Event: $eventType\n");
+			}
+		}
+	}
+}
+
+#if ($nagios_exit_code == Nagios_Unknown && time() - $begin_time > $critical_timeout) {
+if (time() - $begin_time > $critical_timeout) {
+	$nagios_exit_code = Nagios_Critical;
+	$nagios_exit_message = sprintf("XSIEvents timeout (%f seconds)", time() - $begin_time);
+}
+
+$socket->close();
+
+nagios_exit();
+
+sub nagios_exit {
+	print(timestamp()) if $verbose;
+	if ($nagios_exit_code==Nagios_OK || $nagios_exit_code==Nagios_Warning) {
+		# only report time if ok or warning
+		# message|label=value[UOM];[warn];[crit];[min];[max]
+		my $elapsed = time() - $begin_time;	
+		printf("%s|time=%fs;%f;%f;0.0;31.0", $nagios_exit_message, $elapsed, $warning_timeout, $critical_timeout);
+	} else {
+		printf($nagios_exit_message);
+	}
+	
+	print("\n") if $verbose;
+	exit $nagios_exit_code;
+
+}
+
+sub subscribe {
+	my $client = REST::Client->new();
+	$client->addHeader('Content-Type', 'application/xml');
+	$client->addHeader('charset', 'UTF-8');
+	$client->addHeader('Accept', 'application/xml');
+	$client->addHeader('Authorization', 'Basic ' . encode_base64($username . ':' . $password));
+	$client->addHeader('User-Agent', $applicationId);
+	#$client->setTimeout($critical_timeout);
+
+	my $url="https://$host/$xsievents_prefix/v2.0/user/".$username; 
+	my $request = '<?xml version="1.0" encoding="UTF-8"?>
+<Subscription
+    xmlns="http://schema.broadsoft.com/xsi">
+    <event>Basic Call</event>
+    <expires>120</expires>
+    <channelSetId>'.$channelSetId.'</channelSetId>
+    <applicationId>'.$applicationId.'</applicationId>
+</Subscription>';
+	print timestamp()."subscribe.POST($url), xml: $request\n" if $verbose;
+	$client->POST($url, $request);
+	my $response = $client->responseContent();
+	print timestamp()."subscribe.rx($url): $response\n" if $verbose;
+	
+	($subscriptionId) =  ($response =~ /<subscriptionId>([\s\S]*?)<\/subscriptionId>.*/);
+	if ($subscriptionId) {
+		print timestamp()."subscribe.rx($url): got a subscriptionId: $subscriptionId\n" if $verbose;
+		return
+	} 
+
+	my ($summaryEnglish) = ($response =~ /<summaryEnglish>([\s\S]*?)<\/summaryEnglish>.*/);
+	if ($summaryEnglish ne "" || $client->responseCode() ne '200') {
+		if ($summaryEnglish eq "") {
+			$summaryEnglish = "HTTP Status ".$client->responseCode();
+		}
+		$nagios_exit_message = sprintf("XSIEvents - subscription failed with XSI error: \"%s\" after %f seconds", $summaryEnglish, time() - $begin_time);
+		$nagios_exit_code = Nagios_Critical;
+		nagios_exit();
+	} 
+}
+sub timestamp() {
+	my $dt = DateTime->from_epoch( epoch => time() );
+    return $dt->strftime("%Y-%m-%d %H:%M:%S.%6N ");
+}
+sub trim($)
+{
+    my $string = shift;
+    $string =~ s/^\s+//;
+    $string =~ s/\s+$//;
+    return $string;
+}
