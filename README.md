@@ -11,7 +11,6 @@ should ensure that average response time reported with this plugin is less 500mS
 Usage is
 ```
 ./check_xsievents -u username -p password -H hostname 
-
 ```
 with optional parameters
 ```
@@ -26,7 +25,6 @@ Example:
 kimw@m15:~/$ ./check_xsievents -u username@qsc.de -p xxxxxxxx -H xsp4.bmcag.com 
 XSIEvents OK - 0.507755 seconds response time|time=0.507952s;2.000000;30.000000;0.0;31.0
 kimw@m15:~/$
-
 ```
 and
 ```
