@@ -29,9 +29,9 @@ GetOptions(
 	'X|prefix=s' => \$xsievents_prefix,
 	'w|warning=i' => \$warning_timeout,
 	'c|critical=i' => \$critical_timeout
-) or die "Usage: $0 -u username -p password -H hostname [-X xsievent_prefix] [-v] [-c crtitical_timeout] [-w warning_timeout]\n";
+) or die "Usage: $0 -u username -p password -H hostname [-X xsievent_prefix] [-v] [-c critical_timeout] [-w warning_timeout]\n";
 if (!$username || !$password || !$host) {
-	die "Usage: $0 -u username -p password -H hostname\n";
+	die "Usage: $0 -u username -p password -H hostname [-X xsievent_prefix] [-v] [-c critical_timeout] [-w warning_timeout]\n";
 }
 
 
