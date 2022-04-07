@@ -106,7 +106,7 @@ sub nagios_exit {
 		printf($nagios_exit_message);
 	}
 	
-	print("\n") if $verbose;
+	print("\n");
 	exit $nagios_exit_code;
 
 }
