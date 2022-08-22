@@ -72,5 +72,20 @@ Authorization: Basic XXXXXXXXXXXXXXXXXXXXX
 kimw@m15:~/$
 
 ```
+I depends on
 
+```
+use IO::Socket;
+use IO::Socket::SSL;
+use MIME::Base64;
+use REST::Client;
+use Time::HiRes qw( time );
+use Getopt::Long qw(GetOptions);
+```
+which on an Ubuntu can be installed using
+```
+apt install libdatetime-perl libio-socket-ssl-perl librest-client-perl
+```
+
+You will need libio-socket-ssl-perl, librest-client-perl and libdatetime-perl 
 
