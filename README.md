@@ -72,7 +72,8 @@ Authorization: Basic XXXXXXXXXXXXXXXXXXXXX
 kimw@m15:~/$
 
 ```
-I depends on
+
+It depends on
 
 ```
 use IO::Socket;
