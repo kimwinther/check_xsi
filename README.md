@@ -87,5 +87,3 @@ which on an Ubuntu can be installed using
 apt install libdatetime-perl libio-socket-ssl-perl librest-client-perl
 ```
 
-You will need libio-socket-ssl-perl, librest-client-perl and libdatetime-perl 
-
